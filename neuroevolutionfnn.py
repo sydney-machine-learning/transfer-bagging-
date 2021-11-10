@@ -20,6 +20,10 @@ import sys     # max float
 import torch
 import torch.nn as nn
 
+torch.manual_seed(2)
+random.seed(2)
+np.random.seed(2)
+
 class MLP(nn.Module):
     def __init__(self, ip, hid, num_classes = 10):
         super(MLP, self).__init__()
@@ -44,7 +48,7 @@ class MLP(nn.Module):
             return x
 
     def fit(self , lr, error):
-      optim = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=1e-5)
+      optim = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=0)
       error.backward()
       optim.step()
       # print('yo')
@@ -82,6 +86,32 @@ class transfer_bagging():
 	  out = model(x)
 	  return self.criterion(out, y)
 
+	def accuracy(self, model, data):
+	  y = data[:, self.input_size]
+	  y=y.type(torch.LongTensor)  
+	  x = data[:, 0:self.input_size]
+	  out = model(x)
+	  pred = torch.argmax(out, axis=1)
+	  correct = (pred == y).sum()
+	  acc = correct / y.shape[0]
+	  # print(acc)
+	  # iitr
+	  return acc
+
+	def accuracy_avg(self, swarm, data):
+	  y = data[:, self.input_size]
+	  y=y.type(torch.LongTensor)  
+	  x = data[:, 0:self.input_size]
+	  s = torch.zeros((data.shape[0],self.output_size))
+	  for i in range(self.n):
+	    s += swarm[i](x)
+	  pred = torch.argmax(s, axis=1)
+	  correct = (pred == y).sum()
+	  acc = correct / y.shape[0]
+	  # print(acc)
+	  # iitr
+	  return acc
+
 	def create_bags(self):
 
 
@@ -90,7 +120,7 @@ class transfer_bagging():
 
 		swarm = [MLP(self.input_size, self.hidden_size, self.output_size) for i in range(self.n)]
 		swarm_error = [sys.float_info.max] * self.n
-			
+
 		epoch = 0
 
 		for i in range(self.n):
@@ -98,10 +128,12 @@ class transfer_bagging():
 
 		while epoch < self.max_epochs:
 			for gen in range(10):
-			  for i in range(self.n): # process each particle
-			    swarm_error[i] = self.error(swarm[i], torch.tensor(self.bootdata[i]))
-			    swarm[i].fit(1e-3, swarm_error[i])
-			    swarm_error[i] = self.error(swarm[i], torch.tensor(self.bootdata[i]))
+				for i in range(self.n): # process each particle
+					# print(self.n)
+					# print(i)
+					swarm_error[i] = self.error(swarm[i], torch.tensor(self.bootdata[i]))
+					swarm[i].fit(1e-3, swarm_error[i])
+					swarm_error[i] = self.error(swarm[i], torch.tensor(self.bootdata[i]))
 
 			swarm = sort_pop(swarm, swarm_error)
 			swarm_error.sort()
@@ -124,7 +156,12 @@ class transfer_bagging():
 			    swarm[i].load_state_dict(swarm[i-self.n//2].state_dict())
 
 			epoch += 1
- 
+		for i in range(self.n): # process each particle
+
+			print(self.accuracy(swarm[i],torch.tensor(self.testdata)))
+		print('avg',self.accuracy_avg(swarm,torch.tensor(self.testdata))) # process each particle
+
+		iitr
 
 		# train_per, rmse_train = self.swarm_classification_perf(best_swarm_pos, 'train')
 		# test_per, rmse_test = self.swarm_classification_perf(best_swarm_pos, 'test')
